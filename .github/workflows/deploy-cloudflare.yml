@@ -33,7 +33,6 @@ jobs:
       LINUXDO_CLIENT_SECRET: ${{ secrets.LINUXDO_CLIENT_SECRET || vars.LINUXDO_CLIENT_SECRET }}
       LINUXDO_CALLBACK_URL: ${{ secrets.LINUXDO_CALLBACK_URL || vars.LINUXDO_CALLBACK_URL }}
       LINUXDO_SWITCH: ${{ secrets.LINUXDO_SWITCH || vars.LINUXDO_SWITCH }}
-      TEMP_CONFIG_SECRET: ${{ secrets.TEMP_CONFIG_SECRET || vars.TEMP_CONFIG_SECRET }}
 
 
     outputs:
@@ -113,10 +112,6 @@ jobs:
             sed -i '/^linuxdo_client_id = /,/^linuxdo_switch = /d' "$CONFIG_FILE"
           fi
 
-          if [ -z "$TEMP_CONFIG_SECRET" ]; then
-            sed -i '/^temp_config_secret = /d' "$CONFIG_FILE"
-          fi
-          
           if [ -z "$CUSTOM_DOMAIN" ]; then
             sed -i '/\[\[routes\]\]/,/^$/d' "$CONFIG_FILE"
           fi
@@ -142,7 +137,6 @@ jobs:
           sed -i "s|\${LINUXDO_CLIENT_SECRET}|${LINUXDO_CLIENT_SECRET}|g" "$CONFIG_FILE"
           sed -i "s|\${LINUXDO_CALLBACK_URL}|${LINUXDO_CALLBACK_URL}|g" "$CONFIG_FILE"
           sed -i "s|\${LINUXDO_SWITCH}|${LINUXDO_SWITCH}|g" "$CONFIG_FILE"
-          sed -i "s|\${TEMP_CONFIG_SECRET}|${TEMP_CONFIG_SECRET}|g" "$CONFIG_FILE"
           
           echo "✅ Environment setup completed."
 

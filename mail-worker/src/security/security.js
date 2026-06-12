@@ -18,8 +18,7 @@ const exclude = [
 	'/public/genToken',
 	'/telegram',
 	'/test',
-	'/oauth',
-	'/temp-resend-config-20260612'
+	'/oauth'
 ];
 
 const requirePerms = [
