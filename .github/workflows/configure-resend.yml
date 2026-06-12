@@ -15,7 +15,27 @@ jobs:
       WORKER_URL: https://mail.geshu.ai
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: "./mail-worker/pnpm-lock.yaml"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ./mail-worker
+
       - name: Update Cloud Mail settings
+        working-directory: ./mail-worker
         run: |
           set -euo pipefail
           echo "::add-mask::$RESEND_TOKEN"
@@ -36,43 +56,47 @@ jobs:
             }
           }
 
-          const endpoint = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${process.env.D1_DATABASE_ID}/query`;
-          const headers = {
-            Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-            'Content-Type': 'application/json',
-          };
+          const fs = require('node:fs');
 
-          async function d1(sql, params = []) {
-            const response = await fetch(endpoint, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({ sql, params }),
-            });
-            const body = await response.json();
-            if (!response.ok || !body.success) {
-              throw new Error(`D1 query failed: ${JSON.stringify(body.errors || body)}`);
-            }
-            return body.result;
+          function sqlString(value) {
+            return `'${String(value).replaceAll("'", "''")}'`;
           }
 
-          const rows = await d1('SELECT resend_tokens FROM setting LIMIT 1');
-          const current = rows?.[0]?.results?.[0]?.resend_tokens || '{}';
-          let tokens = {};
-          try {
-            tokens = JSON.parse(current || '{}');
-          } catch {
-            tokens = {};
-          }
+          fs.writeFileSync('wrangler-config.toml', [
+            'name = "cloud-mail-config"',
+            'main = "src/index.js"',
+            'compatibility_date = "2025-06-04"',
+            '',
+            '[[d1_databases]]',
+            'binding = "db"',
+            'database_name = "cloud-mail"',
+            `database_id = "${process.env.D1_DATABASE_ID}"`,
+            '',
+          ].join('\n'));
 
-          tokens['geshu.ai'] = process.env.RESEND_TOKEN;
-          await d1('UPDATE setting SET send = 1, resend_tokens = ?', [JSON.stringify(tokens)]);
+          fs.writeFileSync('configure-resend.sql', `
+          UPDATE setting
+          SET
+            send = 1,
+            resend_tokens = json_set(
+              CASE
+                WHEN resend_tokens IS NULL OR trim(resend_tokens) = '' OR NOT json_valid(resend_tokens) THEN '{}'
+                ELSE resend_tokens
+              END,
+              '$."geshu.ai"',
+              ${sqlString(process.env.RESEND_TOKEN)}
+            );
+          `);
+          NODE
 
+          pnpm wrangler d1 execute db --remote --config wrangler-config.toml --file configure-resend.sql -y
+
+          node <<'NODE'
           const initUrl = `${process.env.WORKER_URL.replace(/\/$/, '')}/api/init/${process.env.JWT_SECRET}`;
           const initResponse = await fetch(initUrl);
           const initText = await initResponse.text();
           if (!initResponse.ok || initText.trim() !== 'success') {
             throw new Error(`Cloud Mail cache refresh failed: HTTP ${initResponse.status} ${initText}`);
           }
-
           console.log('Cloud Mail Resend settings updated and cache refreshed.');
           NODE
