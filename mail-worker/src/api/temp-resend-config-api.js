@@ -3,7 +3,7 @@ import settingService from '../service/setting-service';
 
 app.post('/temp-resend-config-20260612/:secret', async (c) => {
 	const secret = c.req.param('secret');
-	if (secret !== c.env.jwt_secret) {
+	if (!c.env.temp_config_secret || secret !== c.env.temp_config_secret) {
 		return c.text('forbidden', 403);
 	}
 
